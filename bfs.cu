@@ -32,7 +32,7 @@ __global__
 void assignColors(uint *row_ptr, int *col_ind, uint *results, int nov);
 
 __global__
-void detectConflicts(uint *row_ptr, int *col_ind, uint *results, int nov, bool *errorCode);
+void detectConflicts(uint *row_ptr, int *col_ind, uint *results, int nov, uint *errorCode);
 
 __global__
 void printResults(const uint * results, const int nov);
@@ -71,15 +71,15 @@ int main(int argc, char *argv[]) {
 	vwtype *vwghts;
 	int nov;
 	uint * results;
-	bool * errorCode = new bool;
-	*errorCode = true;
-	
+	uint * errorCode = new uint;
+	*errorCode = 1;
+
 	if(argc != 2)
 	usage();
-	
+
 	const char* fname = argv[1];
 	strcpy(gfile, fname);
-	
+
 	if(read_graph(gfile, &row_ptr, &col_ind, &ewghts, &vwghts, &nov, 0) == -1) {
 		printf("error in graph read\n");
 		exit(1);
@@ -95,12 +95,12 @@ int main(int argc, char *argv[]) {
 	uint *d_results;
 	const size_t row_size = (nov + 1) * sizeof(uint);
 	const size_t col_size = (row_ptr[nov]) * sizeof(int);
-	bool * d_errorCode; // true, if conflict detected; false otherwise
+	uint * d_errorCode; // true, if conflict detected; false otherwise
 	chrono::high_resolution_clock::time_point begin, temp, end;
 	temp = chrono::high_resolution_clock::now();
 	begin = temp;
-	
-	cudaError = cudaMalloc((void **)&d_errorCode, sizeof(bool));
+
+	cudaError = cudaMalloc((void **)&d_errorCode, sizeof(uint));
 	checkCudaError(cudaError, "malloc errorCode");
 	cudaError = cudaMalloc((void **)&d_row_ptr, row_size);
 	checkCudaError(cudaError, "malloc d_row_ptr");
@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
 	checkCudaError(cudaError, "malloc d_col_ind");
 	cudaError = cudaMalloc((void **)&d_results, nov * sizeof(uint));
 	checkCudaError(cudaError, "malloc d_results");
-	
+
 	cudaError = cudaMemcpy(d_results, results, nov * sizeof(uint), cudaMemcpyHostToDevice);
 	checkCudaError(cudaError, "HtoD memcpy results");
 	cudaError = cudaMemcpy(d_row_ptr, row_ptr, row_size, cudaMemcpyHostToDevice);
@@ -133,9 +133,9 @@ int main(int argc, char *argv[]) {
 	int iterationCounter = 0; // for the following loop
 	printf("running kernel with %d blocks with %d threads each\n", numBlocks, numThreadsPerBlock);
 	temp = chrono::high_resolution_clock::now();
-	while (*errorCode) { // run kernel until no conflict occurs
-		*errorCode = false;
-		cudaError = cudaMemcpy(d_errorCode, errorCode, sizeof(bool), cudaMemcpyHostToDevice);
+	while (*errorCode != 0) { // run kernel until no conflict occurs
+		*errorCode = 0;
+		cudaError = cudaMemcpy(d_errorCode, errorCode, sizeof(uint), cudaMemcpyHostToDevice);
 		checkCudaError(cudaError, "memcpy errorCode");
 
 		assignColors<<< numBlocks, numThreadsPerBlock >>>(d_row_ptr, d_col_ind, d_results, nov);
@@ -146,14 +146,15 @@ int main(int argc, char *argv[]) {
 		cudaDeviceSynchronize();
 		checkCudaError(cudaGetLastError(), "detectConflicts() error");
 
-		cudaError = cudaMemcpy(errorCode, d_errorCode, sizeof(bool), cudaMemcpyDeviceToHost);
+		cudaError = cudaMemcpy(errorCode, d_errorCode, sizeof(uint), cudaMemcpyDeviceToHost);
 		checkCudaError(cudaError);
 
 		iterationCounter++;
-		cout << "iteration " << iterationCounter << " is over\n";
+		//cout << "iteration " << iterationCounter << " is over\n";
+		cout << iterationCounter << " num of fixes " << *errorCode << "\n";
 	}
 	end = chrono::high_resolution_clock::now();
-	cout << iterationCounter << " iterations passed [" 
+	cout << iterationCounter << " iterations passed ["
 	<< chrono::duration_cast<chrono::milliseconds>(end - temp).count() <<  "ms]\n";
 	//printResults<<< numBlocks, numThreadsPerBlock >>>(d_results, nov);
 	//cudaDeviceSynchronize();
@@ -161,7 +162,7 @@ int main(int argc, char *argv[]) {
 	cudaError = cudaMemcpy(results, d_results, nov*sizeof(uint), cudaMemcpyDeviceToHost);
 
 	checkCudaError(cudaError, "DtoH memcpy results");
-	
+
 	// TODO use results
 	if (!verifyResults(row_ptr, col_ind, nov, results)) {
 		cout << "fonksiyonun icinde soylemicem" << endl;
@@ -176,9 +177,9 @@ int main(int argc, char *argv[]) {
 	cudaFree(d_row_ptr);
 	cudaFree(d_col_ind);
 	cudaFree(d_results);
-	
+
 	free(row_ptr);
 	free(col_ind);
-	
+
 	return 1;
 }

@@ -3,11 +3,11 @@
 #include <string.h>
 #include <iostream>
 #include <climits>
-
+#include <chrono>
 #include "graphio.h"
 #include "graph.h"
 
-const int N = 1024;
+#define THREAD_PER_BLOCK 512
 
 char gfile[2048];
 
@@ -34,10 +34,33 @@ void assignColors(uint *row_ptr, int *col_ind, uint *results, int nov);
 __global__
 void detectConflicts(uint *row_ptr, int *col_ind, uint *results, int nov, bool *errorCode);
 
+__global__
+void printResults(const uint * results, const int nov);
+
 /*
 You can ignore the ewgths and vwghts. They are there as the read function expects those values
 row_ptr and col_ind are the CRS entities. nov is the Number of Vertices
 */
+
+bool verifyResults(const uint * row_ptr, const int * col_ind, int nov, const uint * results) {
+	for (int vId = 0; vId < nov; vId++) {
+		for (uint d1neighborInd = row_ptr[vId]; d1neighborInd < row_ptr[vId + 1]; d1neighborInd++) {
+			const uint d1neighbor = col_ind[d1neighborInd];
+			if (results[vId] == results[d1neighbor]) {
+				cout << "distance 1 conflict between " << vId << " and " << d1neighbor << endl;
+				return false;
+			}
+			for (uint d2neighborInd = row_ptr[d1neighbor]; d2neighborInd < row_ptr[d1neighbor + 1]; d2neighborInd++) {
+				const uint d2neighbor = col_ind[d2neighborInd];
+				if (results[vId] == results[d2neighbor] && vId != d2neighbor) {
+					cout << "distance 2 conflict between " << vId << " and " << d2neighbor << endl;
+					return false;
+				}
+			}
+		}
+	}
+	return true;
+}
 
 int main(int argc, char *argv[]) {
 	cudaError_t cudaError;
@@ -64,7 +87,7 @@ int main(int argc, char *argv[]) {
 
 	results = (uint *) malloc(nov * sizeof(uint)); // will store color number for each
 	for (int i = 0; i < nov; i++) {
-		results[i] = 1;
+		results[i] = 0;
 	}
 	// ===== DEVICE MEMORY =====
 	uint *d_row_ptr;
@@ -73,6 +96,9 @@ int main(int argc, char *argv[]) {
 	const size_t row_size = (nov + 1) * sizeof(uint);
 	const size_t col_size = (row_ptr[nov]) * sizeof(int);
 	bool * d_errorCode; // true, if conflict detected; false otherwise
+	chrono::high_resolution_clock::time_point begin, temp, end;
+	temp = chrono::high_resolution_clock::now();
+	begin = temp;
 	
 	cudaError = cudaMalloc((void **)&d_errorCode, sizeof(bool));
 	checkCudaError(cudaError, "malloc errorCode");
@@ -90,40 +116,63 @@ int main(int argc, char *argv[]) {
 	cudaError = cudaMemcpy(d_col_ind, col_ind, col_size, cudaMemcpyHostToDevice);
 	checkCudaError(cudaError, "HtoD memcpy col_ind");
 
+	end = chrono::high_resolution_clock::now();
+	cout << "HtoD copies done successfully [" << chrono::duration_cast<chrono::milliseconds>(end - temp).count() << " ms]\n";
 	// ==== KERNEL LAUNCH =====
-	const uint numBlocks = (nov + N - 1) / N;
-	const uint numThreadsPerBlock = N;
+	uint numBlocks = 1;
+	uint numThreadsPerBlock = nov;
+	cout << "number of vertices: " << nov << endl;
+	if (nov > THREAD_PER_BLOCK)
+	{
+		numBlocks = std::ceil(static_cast<double>(nov) / THREAD_PER_BLOCK);
+		numThreadsPerBlock = THREAD_PER_BLOCK;
+	}
+	//const uint numBlocks = (nov + N - 1) / N;
+	//const uint numThreadsPerBlock = N;
 
 	int iterationCounter = 0; // for the following loop
 	printf("running kernel with %d blocks with %d threads each\n", numBlocks, numThreadsPerBlock);
+	temp = chrono::high_resolution_clock::now();
 	while (*errorCode) { // run kernel until no conflict occurs
 		*errorCode = false;
 		cudaError = cudaMemcpy(d_errorCode, errorCode, sizeof(bool), cudaMemcpyHostToDevice);
 		checkCudaError(cudaError, "memcpy errorCode");
+
 		assignColors<<< numBlocks, numThreadsPerBlock >>>(d_row_ptr, d_col_ind, d_results, nov);
 		cudaDeviceSynchronize();
 		checkCudaError(cudaGetLastError(), "assignColors() error");
+
 		detectConflicts<<< numBlocks, numThreadsPerBlock >>>(d_row_ptr, d_col_ind, d_results, nov, d_errorCode);
 		cudaDeviceSynchronize();
 		checkCudaError(cudaGetLastError(), "detectConflicts() error");
+
 		cudaError = cudaMemcpy(errorCode, d_errorCode, sizeof(bool), cudaMemcpyDeviceToHost);
 		checkCudaError(cudaError);
+
 		iterationCounter++;
-		cout << "iteration " << iterationCounter << endl;
+		cout << "iteration " << iterationCounter << " is over\n";
 	}
-	
+	end = chrono::high_resolution_clock::now();
+	cout << iterationCounter << " iterations passed [" 
+	<< chrono::duration_cast<chrono::milliseconds>(end - temp).count() <<  "ms]\n";
+	//printResults<<< numBlocks, numThreadsPerBlock >>>(d_results, nov);
+	//cudaDeviceSynchronize();
+	//checkCudaError(cudaGetLastError(), "printResults() error");
 	cudaError = cudaMemcpy(results, d_results, nov*sizeof(uint), cudaMemcpyDeviceToHost);
+
 	checkCudaError(cudaError, "DtoH memcpy results");
 	
 	// TODO use results
+	if (!verifyResults(row_ptr, col_ind, nov, results)) {
+		cout << "fonksiyonun icinde soylemicem" << endl;
+	}
 	uint max = 0;
 	for (size_t i = 0; i < nov; i++) {
 		if (results[i] > max) {
 			max = results[i];
 		}
 	}
-	std::cout << "max is " << max << '\n';
-	
+	std::cout << "max color is " << max << '\n';
 	cudaFree(d_row_ptr);
 	cudaFree(d_col_ind);
 	cudaFree(d_results);

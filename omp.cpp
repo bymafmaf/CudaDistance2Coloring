@@ -27,7 +27,7 @@ void usage() {
 }
 
 bool conflictDetected;
-// schedule(dynamic, 1024)
+
 void assignColors(const etype * row_ptr, const vtype * col_ind, const int nov, uint * colors) {
     uint colorToAssign = 1;
 #pragma omp parallel for shared(colors) private(colorToAssign) num_threads(THR_COUNT) schedule(dynamic, 2048)

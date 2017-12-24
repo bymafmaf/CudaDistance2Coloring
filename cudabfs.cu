@@ -59,11 +59,11 @@ void detectConflicts(uint *row_ptr, int *col_ind, uint *results, int nov, uint *
 			if (results[vIndex] == results[d1neighbor]) {
 				if (vIndex < d1neighbor) {
 					//printf("%d - %d collision - resetting %d\n", vIndex, d1neighbor, vIndex);
-					results[vIndex]++;
+					atomicMax(&results[vIndex], results[vIndex]+1);
 				}
 				else {
 					//printf("%d - %d collision - resetting %d", vIndex, d1neighbor, d1neighbor);
-					results[d1neighbor]++;
+					atomicMax(&results[d1neighbor], results[d1neighbor]+1);
 				}
 				fixDone = true;
 				break;
@@ -74,11 +74,11 @@ void detectConflicts(uint *row_ptr, int *col_ind, uint *results, int nov, uint *
 				if (results[vIndex] == results[d2neighbor] && vIndex != d2neighbor) {
 					if (vIndex < d2neighbor) {
 						//printf("%d - %d collision - resetting %d\n", vIndex, d2neighbor, vIndex);
-						results[vIndex]++;
+						atomicMax(&results[vIndex], results[vIndex]+1);
 					}
 					else {
 						//printf("%d - %d collision - resetting %d\n", vIndex, d2neighbor, d2neighbor);
-						results[d2neighbor]++;
+						atomicMax(&results[d2neighbor], results[d2neighbor]+1);
 					}
 					fixDone = true;
 					secondDistanceConflictFound = true;

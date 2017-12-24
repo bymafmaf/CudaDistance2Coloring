@@ -4,16 +4,18 @@
 #include <iostream>
 #include <climits>
 #include <chrono>
+#include <omp.h>
 #include "graphio.h"
 #include "graph.h"
 
 #define THREAD_PER_BLOCK 512
-#define THR_COUNT 16
 
 char gfile[2048];
 
 using namespace std;
 typedef unsigned int uint;
+
+uint THR_COUNT = 16;
 
 void usage(){
 	printf("./bfs <filename> <sourceIndex>\n");
@@ -67,6 +69,7 @@ bool verifyResults(const uint * row_ptr, const int * col_ind, int nov, const uin
 
 void detectConflictsCPU(const etype * row_ptr, const vtype * col_ind, const int nov, uint * colors) {
     uint conflictCounter = 0;
+	omp_set_num_threads(THR_COUNT);
 #pragma omp parallel for shared(colors) num_threads(THR_COUNT) schedule(dynamic, 1024) reduction(+:conflictCounter)
     for (uint vertex = 0; vertex < nov; vertex++) {
         bool secondDistanceConflictFound = false;
@@ -99,6 +102,9 @@ void detectConflictsCPU(const etype * row_ptr, const vtype * col_ind, const int 
             }
         }
     }
+	if (conflictCounter < 150000) {
+		THR_COUNT = 1;
+	}
     cout << conflictCounter << " conflicts detected\n";
 }
 
@@ -197,7 +203,6 @@ int main(int argc, char *argv[]) {
 
 		iterationCounter++;
 		//cout << "iteration " << iterationCounter << " is over\n";
-		cout << iterationCounter << " num of fixes " << *errorCode << "\n";
 	}
 	end = chrono::high_resolution_clock::now();
 	cout << iterationCounter << " iterations passed ["

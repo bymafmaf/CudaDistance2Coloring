@@ -30,7 +30,7 @@ bool conflictDetected;
 
 void assignColors(const etype * row_ptr, const vtype * col_ind, const int nov, uint * colors) {
     uint colorToAssign = 1;
-#pragma omp parallel for shared(colors) private(colorToAssign) num_threads(THR_COUNT) schedule(dynamic, 2048)
+#pragma omp parallel for shared(colors) private(colorToAssign) num_threads(THR_COUNT) schedule(dynamic, 1024)
     for (uint vertex = 0; vertex < nov; vertex++) {
         if (colors[vertex] != 0) {
             continue;
@@ -60,7 +60,7 @@ void assignColors(const etype * row_ptr, const vtype * col_ind, const int nov, u
 
 void detectConflicts(const etype * row_ptr, const vtype * col_ind, const int nov, uint * colors) {
     uint conflictCounter = 0;
-    #pragma omp parallel for shared(colors) num_threads(THR_COUNT) schedule(dynamic, 2048) reduction(+:conflictCounter)
+    #pragma omp parallel for shared(colors) num_threads(THR_COUNT) schedule(dynamic, 1024) reduction(+:conflictCounter)
     for (uint vertex = 0; vertex < nov; vertex++) {
         bool secondDistanceConflictFound = false;
         for (uint neighborIndex = row_ptr[vertex]; neighborIndex < row_ptr[vertex + 1] && !secondDistanceConflictFound && colors[vertex] != 0; neighborIndex++) {
@@ -128,8 +128,7 @@ int colorCount(const uint * colors, int nov){
 }
 
 int main(int argc, char *argv[]) {
-    omp_set_dynamic(0);
-    //omp_set_num_threads(THR_COUNT);
+    omp_set_num_threads(THR_COUNT);
     etype *row_ptr;
     vtype *col_ind;
     ewtype *ewghts;

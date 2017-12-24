@@ -10,5 +10,13 @@ omp: omp.cpp
 	gcc mmio.c -c -O3
 	g++ -O3 -c omp.cpp -std=c++11 -fopenmp
 	gcc -o omp omp.o mmio.o graphio.o -fopenmp -lstdc++ -O3
+
+hybrid: hybrid.cu
+	g++ graphio.c -c -O3
+	g++ mmio.c -c -O3
+	nvcc -O3 -c cudabfs.cu
+	nvcc hybrid.cu -c -O3 -std=c++11 -Xcompiler -fopenmp
+	g++ -o bfs hybrid.o mmio.o graphio.o cudabfs.o -O3 -lcuda -lcudart -L/usr/local/cuda/lib64/ -fpermissive
+
 clean:
 	rm -f bfs *.o

@@ -17,6 +17,7 @@ extern"C" {
 #endif
 
 int THR_COUNT = 32;
+const int MAX_COLOR = 3584;
 
 char gfile[2048];
 
@@ -28,99 +29,38 @@ void usage() {
 }
 
 bool conflictDetected;
-//const uint forbiddenArraySize = 512;
-void assignColors(const etype * row_ptr, const vtype * col_ind, const int nov, uint * colors) {
-  static uint *forbiddenArray;
-  static uint lastIndex;
-  static uint count;
-  #pragma omp threadprivate(forbiddenArray, lastIndex, count)
-  #pragma omp parallel for shared(colors) num_threads(THR_COUNT)
-  for (uint vertex = 0; vertex < nov; vertex++) {
-    if (colors[vertex] != 0) {
-      continue;
-    }
-    count = 0;
-    for (uint neighborIndex = row_ptr[vertex]; neighborIndex < row_ptr[vertex + 1]; neighborIndex++) { // distance-1 neighbor loop
-      uint d1neighbor = col_ind[neighborIndex];
-      count += row_ptr[d1neighbor + 1] - row_ptr[d1neighbor] + 1;
-    }
-    forbiddenArray = (uint *)malloc(count * sizeof(uint));
-    //memset(forbiddenArray, 0, count);
-    // cout << "num threads: " << omp_get_num_threads() << endl;
-    lastIndex = 0;
-    for (uint neighborIndex = row_ptr[vertex]; neighborIndex < row_ptr[vertex + 1]; neighborIndex++) { // distance-1 neighbor loop
-      uint d1neighbor = col_ind[neighborIndex];
-      //std::cout << "lastIndex " << lastIndex << '\n';
-      forbiddenArray[lastIndex] = colors[d1neighbor];
-      lastIndex++;
-      for (uint d2neighborIndex = row_ptr[d1neighbor]; d2neighborIndex < row_ptr[d1neighbor + 1]; d2neighborIndex++) {
-        uint d2neighbor = col_ind[d2neighborIndex];
-        //std::cout << "lastIndex " << lastIndex << '\n';
-        forbiddenArray[lastIndex] = colors[d2neighbor];
-        lastIndex++;
-      }
-    }
-    for (size_t selectedColor = 1; selectedColor < nov; selectedColor++) {
-      bool found = false;
-      for (size_t i = 0; i < lastIndex; i++) {
-        if (selectedColor == forbiddenArray[i]) {
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        colors[vertex] = selectedColor;
-        break;
-      }
-    }
-    free(forbiddenArray);
-  }
-  cout << "assign completed" << endl;
-}
 
 void detectConflicts(const etype * row_ptr, const vtype * col_ind, const int nov, uint * colors) {
   uint conflictCounter = 0;
-  static uint *forbiddenArray;
-  static uint lastIndex;
-  static uint count;
-  #pragma omp threadprivate(forbiddenArray, lastIndex, count)
+  static bool forbiddenArray[MAX_COLOR];
+  #pragma omp threadprivate(forbiddenArray)
   #pragma omp parallel for shared(colors) num_threads(THR_COUNT) reduction(+:conflictCounter)
   for (uint vertex = 0; vertex < nov; vertex++) {
-    lastIndex = 0;
-    count = 0;
-    for (uint neighborIndex = row_ptr[vertex]; neighborIndex < row_ptr[vertex + 1]; neighborIndex++) { // distance-1 neighbor loop
-      uint d1neighbor = col_ind[neighborIndex];
-      count += row_ptr[d1neighbor + 1] - row_ptr[d1neighbor] + 1;
-    }
-    forbiddenArray = (uint *)malloc(count * sizeof(uint));
     //memset(forbiddenArray, 0, count);
+    for (size_t i = 0; i < MAX_COLOR; i++) {
+      forbiddenArray[i] = false;
+    }
     for (uint neighborIndex = row_ptr[vertex]; neighborIndex < row_ptr[vertex + 1]; neighborIndex++) {
       const uint d1neighbor = col_ind[neighborIndex];
-      forbiddenArray[lastIndex] = colors[d1neighbor];
-      lastIndex++;
+      forbiddenArray[colors[d1neighbor]] = true;
       for (uint d2neighborIndex = row_ptr[d1neighbor]; d2neighborIndex < row_ptr[d1neighbor + 1]; d2neighborIndex++) {
         const uint d2neighbor = col_ind[d2neighborIndex];
         if (vertex != d2neighbor) {
-          forbiddenArray[lastIndex] = colors[d2neighbor];
-          lastIndex++;
+          forbiddenArray[colors[d2neighbor]] = true;
         }
       }
     }
-    // cout << "own color " << colors[vertex] << endl;
-    // cout << "own index " << vertex << endl;
-    // for (size_t i = 0; i < count; i++) {
-    //   std::cout << forbiddenArray[i] << " ";
-    // }
-    // cout << endl;
-    for (size_t i = 0; i < count; i++) {
-      if (forbiddenArray[i] == colors[vertex] && forbiddenArray[i] != 0) {
-        colors[vertex] = 0;
-        conflictDetected = true;
-        conflictCounter++;
-        break;
+
+    if (forbiddenArray[colors[vertex]] == true) {
+      conflictDetected = true;
+      conflictCounter++;
+      for (size_t i = 1; i < MAX_COLOR; i++) {
+        if (forbiddenArray[i] == 0) {
+          colors[vertex] = i;
+          break;
+        }
       }
     }
-    free(forbiddenArray);
   }
   cout << conflictCounter << " conflicts detected\n";
 }
@@ -188,8 +128,17 @@ int main(int argc, char *argv[]) {
   /****** YOUR CODE GOES HERE *******/
   uint * colors = new uint[nov];
   // 1 - initialize colors to 0 [0 = uncolored]
-  for (uint i = 0; i < nov; i++) {
+  for (size_t i = 0; i < nov; i++) {
     colors[i] = 0;
+  }
+  for (uint vertex = 0; vertex < nov; vertex++) {
+    uint num = 1;
+    for (uint neighborInd = row_ptr[vertex]; neighborInd < row_ptr[vertex + 1]; neighborInd++) {
+      const uint neighbor = col_ind[neighborInd];
+      if (colors[neighbor] == 0) {
+        colors[neighbor] = row_ptr[vertex + 1] - neighborInd;
+      }
+    }
   }
 
   begin = std::chrono::high_resolution_clock::now();
@@ -201,7 +150,6 @@ int main(int argc, char *argv[]) {
   int iterationCounter = 0;
   while (conflictDetected) {
     conflictDetected = false;
-    assignColors(row_ptr, col_ind, nov, colors);
     detectConflicts(row_ptr, col_ind, nov, colors);
     ++iterationCounter;
   }

@@ -4,7 +4,6 @@
 #include <omp.h>
 #include <iostream>
 #include <chrono>
-#include <set>
 using namespace std;
 
 #ifdef __cplusplus

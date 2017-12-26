@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
       }
     }
   }
-	cout << "int size " << sizeof(int) << endl;
+	cout << "long int size " << sizeof(long int) << endl;
 	cudaError = cudaMalloc((void **)&d_errorCode, sizeof(uint));
 	checkCudaError(cudaError, "malloc errorCode");
 	cudaError = cudaMalloc((void **)&d_row_ptr, row_size);

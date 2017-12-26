@@ -25,9 +25,9 @@ void printResults(const uint * results, const int nov) {
 __global__
 void detectConflicts(uint *row_ptr, int *col_ind, uint *results, int nov, uint * errorCode) {
 	const uint vIndex = blockIdx.x * blockDim.x + threadIdx.x;
-	// 128 int per thread. 128 * 32 = 4096 bit per thread. Total of 8192 int per block.
-	__shared__ int forbiddenArray[8192];
-	for (size_t i = 0; i < 8192; i++) {
+	// 64 long int per thread. 64 * 32 = 4096 bit per thread. Total of 4096 long int per block.
+	__shared__ long int forbiddenArray[4096];
+	for (size_t i = 0; i < 4096; i++) {
 		forbiddenArray[i] = 0;
 	}
 	__syncthreads();
@@ -35,25 +35,25 @@ void detectConflicts(uint *row_ptr, int *col_ind, uint *results, int nov, uint *
 		const uint padding = threadIdx.x * 4096; //4096 bit per thread
 		for (uint neighborIndex = row_ptr[vIndex]; neighborIndex < row_ptr[vIndex+1]; neighborIndex++) { // distance-1 neighbor loop
 			const uint d1neighbor = col_ind[neighborIndex];
-			forbiddenArray[((padding + results[d1neighbor])/32)] |= (1 << ((padding + results[d1neighbor])%32));
+			forbiddenArray[((padding + results[d1neighbor])/64)] |= (1 << ((padding + results[d1neighbor])%64));
 			for (uint d2neighborIndex = row_ptr[d1neighbor]; d2neighborIndex < row_ptr[d1neighbor + 1]; d2neighborIndex++) {
 				if (col_ind[d2neighborIndex] != vIndex) {
 					const uint d2neighbor = col_ind[d2neighborIndex];
-					forbiddenArray[((padding + results[d2neighbor])/32)] |= (1 << ((padding + results[d2neighbor])%32));
+					forbiddenArray[((padding + results[d2neighbor])/64)] |= (1 << ((padding + results[d2neighbor])%64));
 				}
 			}
 		}
-		if (forbiddenArray[((padding + results[vIndex])/32)] & (1 << ((padding + results[vIndex])%32))) {
+		if (forbiddenArray[((padding + results[vIndex])/64)] & (1 << ((padding + results[vIndex])%64))) {
 			atomicAdd(errorCode, 1);
 			for (size_t i = 1; i < BITSIZE_PER_THREAD; i++) {
-				if (!forbiddenArray[((padding + i)/32)] & (1 << ((padding + i)%32))) {
+				if (!forbiddenArray[((padding + i)/64)] & (1 << ((padding + i)%64))) {
 					results[vIndex] = i;
 					break;
 				}
 			}
 		}
 		for (size_t i = 0; i < BITSIZE_PER_THREAD; i++) {
-			forbiddenArray[((padding + i)/32)] &= ~(1 << ((padding + i)%32));
+			forbiddenArray[((padding + i)/64)] &= ~(1 << ((padding + i)%64));
 		}
 	}
 }

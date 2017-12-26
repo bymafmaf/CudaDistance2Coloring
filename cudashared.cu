@@ -36,25 +36,32 @@ void detectConflicts(uint *row_ptr, int *col_ind, uint *results, int nov, uint *
 		const uint padding = threadIdx.x * 4096; //4096 bit per thread
 		for (uint neighborIndex = row_ptr[vIndex]; neighborIndex < row_ptr[vIndex+1]; neighborIndex++) { // distance-1 neighbor loop
 			const uint d1neighbor = col_ind[neighborIndex];
-			forbiddenArray[((padding + results[d1neighbor])/64)] |= (1 << ((padding + results[d1neighbor])%64));
+			forbiddenArray[((padding + results[d1neighbor])/64)] |= (1 << ((padding + results[d1neighbor])%64)); // set
 			for (uint d2neighborIndex = row_ptr[d1neighbor]; d2neighborIndex < row_ptr[d1neighbor + 1]; d2neighborIndex++) {
 				if (col_ind[d2neighborIndex] != vIndex) {
 					const uint d2neighbor = col_ind[d2neighborIndex];
-					forbiddenArray[((padding + results[d2neighbor])/64)] |= (1 << ((padding + results[d2neighbor])%64));
+					forbiddenArray[((padding + results[d2neighbor])/64)] |= (1 << ((padding + results[d2neighbor])%64)); // set
 				}
 			}
 		}
 		if (forbiddenArray[((padding + results[vIndex])/64)] & (1 << ((padding + results[vIndex])%64))) {
 			atomicAdd(errorCode, 1);
-			for (size_t i = 1; i < BITSIZE_PER_THREAD; i++) {
-				if (!forbiddenArray[((padding + i)/64)] & (1 << ((padding + i)%64))) {
+			uint num = 0;
+			for (size_t i = 0; i < 64; i++) {
+				if (forbiddenArray[threadIdx.x * 64 + i] < LONG_MAX) {
+					num = i;
+					break;
+				}
+			}
+			for (size_t i = num * 64; i < BITSIZE_PER_THREAD; i++) {
+				if (!forbiddenArray[((padding + i)/64)] & (1 << ((padding + i)%64))) { // test
 					results[vIndex] = i;
 					break;
 				}
 			}
 		}
 		for (size_t i = 0; i < BITSIZE_PER_THREAD; i++) {
-			forbiddenArray[((padding + i)/64)] &= ~(1 << ((padding + i)%64));
+			forbiddenArray[((padding + i)/64)] &= ~(1 << ((padding + i)%64)); // clear
 		}
 	}
 }

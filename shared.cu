@@ -7,7 +7,7 @@
 #include "graphio.h"
 #include "graph.h"
 
-#define THREAD_PER_BLOCK 64
+#define THREAD_PER_BLOCK 80
 
 char gfile[2048];
 

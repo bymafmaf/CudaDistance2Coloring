@@ -25,9 +25,10 @@ void printResults(const uint * results, const int nov) {
 __global__
 void detectConflicts(uint *row_ptr, int *col_ind, uint *results, int nov, uint * errorCode) {
 	const uint vIndex = blockIdx.x * blockDim.x + threadIdx.x;
-	// 64 long int per thread. 64 * 32 = 4096 bit per thread. Total of 4096 long int per block.
-	__shared__ long int forbiddenArray[4096];
-	for (size_t i = 0; i < 4096; i++) {
+	// 64 long int per thread. 64longint * 64bit = 4096 bit per thread. Total of 5120 long int per block for 80 threads
+	// max shared memory per block is 48K bytes. Using 40K
+	__shared__ long int forbiddenArray[5120];
+	for (size_t i = 0; i < 5120; i++) {
 		forbiddenArray[i] = 0;
 	}
 	__syncthreads();
